@@ -361,6 +361,139 @@ def process_forecast_data(json_data):
     
     return result
 
+def send_to_cloudwatch(forecast_data):
+    """
+    날씨 데이터를 CloudWatch 메트릭으로 전송합니다.
+    """
+    try:
+        # CloudWatch 클라이언트 생성
+        cloudwatch = boto3.client('cloudwatch')
+        
+        # 시각화 데이터 준비
+        visualization_data = prepare_visualization_data(forecast_data)
+        
+        # 시간별 온도 데이터 전송
+        for temp_data in visualization_data.get('temperature_by_hour', []):
+            cloudwatch.put_metric_data(
+                Namespace='WeatherMetrics',
+                MetricData=[{
+                    'MetricName': 'Temperature',
+                    'Value': temp_data.get('value', 0),
+                    'Unit': 'None',
+                    'Dimensions': [
+                        {
+                            'Name': 'Hour',
+                            'Value': str(temp_data.get('time', 0))
+                        }
+                    ]
+                }]
+            )
+        
+        # 시간별 강수확률 데이터 전송
+        for rain_data in visualization_data.get('rain_probability_by_hour', []):
+            cloudwatch.put_metric_data(
+                Namespace='WeatherMetrics',
+                MetricData=[{
+                    'MetricName': 'RainProbability',
+                    'Value': rain_data.get('value', 0),
+                    'Unit': 'Percent',
+                    'Dimensions': [
+                        {
+                            'Name': 'Hour',
+                            'Value': str(rain_data.get('time', 0))
+                        }
+                    ]
+                }]
+            )
+        
+        # 시간별 습도 데이터 전송
+        for humidity_data in visualization_data.get('humidity_by_hour', []):
+            cloudwatch.put_metric_data(
+                Namespace='WeatherMetrics',
+                MetricData=[{
+                    'MetricName': 'Humidity',
+                    'Value': humidity_data.get('value', 0),
+                    'Unit': 'Percent',
+                    'Dimensions': [
+                        {
+                            'Name': 'Hour',
+                            'Value': str(humidity_data.get('time', 0))
+                        }
+                    ]
+                }]
+            )
+        
+        # 일별 온도 범위 데이터 전송
+        for daily_data in visualization_data.get('temperature_by_day', []):
+            date_name = daily_data.get('date', '오늘')
+            cloudwatch.put_metric_data(
+                Namespace='WeatherMetrics',
+                MetricData=[
+                    {
+                        'MetricName': 'MinTemperature',
+                        'Value': daily_data.get('min_temp', 0),
+                        'Unit': 'None',
+                        'Dimensions': [
+                            {
+                                'Name': 'Date',
+                                'Value': date_name
+                            }
+                        ]
+                    },
+                    {
+                        'MetricName': 'MaxTemperature',
+                        'Value': daily_data.get('max_temp', 0),
+                        'Unit': 'None',
+                        'Dimensions': [
+                            {
+                                'Name': 'Date',
+                                'Value': date_name
+                            }
+                        ]
+                    }
+                ]
+            )
+        
+        # 날씨 상태 코드 전송 (맑음=1, 구름많음=3, 흐림=4, 비=5 등으로 매핑)
+        weather_code_map = {
+            '맑음': 1,
+            '구름많음': 3,
+            '흐림': 4,
+            '비': 5,
+            '비/눈': 6,
+            '눈': 7,
+            '소나기': 8
+        }
+        
+        for daily_data in visualization_data.get('temperature_by_day', []):
+            date_name = daily_data.get('date', '오늘')
+            weather = daily_data.get('weather', '맑음')
+            weather_code = weather_code_map.get(weather, 0)
+            
+            cloudwatch.put_metric_data(
+                Namespace='WeatherMetrics',
+                MetricData=[{
+                    'MetricName': 'WeatherState',
+                    'Value': weather_code,
+                    'Unit': 'None',
+                    'Dimensions': [
+                        {
+                            'Name': 'Date',
+                            'Value': date_name
+                        }
+                    ]
+                }]
+            )
+        
+        print("CloudWatch에 날씨 메트릭 전송 완료")
+        return True
+    
+    except Exception as e:
+        print(f"CloudWatch 메트릭 전송 중 오류 발생: {e}")
+        import traceback
+        print(f"상세 오류 정보: {traceback.format_exc()}")
+        return False
+
 def lambda_handler(event, context):
     """
     AWS Lambda 핸들러 함수
@@ -400,6 +533,9 @@ def lambda_handler(event, context):
         # 예보 데이터 처리
         forecast_data = process_forecast_data(api_result)
         
+        # CloudWatch에 메트릭 전송
+        send_to_cloudwatch(forecast_data)
+
         # Grafana에서 쉽게 시각화할 수 있는 형식으로 데이터 변환
         visualization_data = prepare_visualization_data(forecast_data)
         
