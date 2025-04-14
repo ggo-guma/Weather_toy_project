@@ -13,7 +13,7 @@
 
 ## 📌 Architecture
 
-![스마트 기상 예측 시스템 아키텍처.drawio (1).png](attachment:8ac2eb2e-18be-4341-8cf2-63e47e8b5f67:스마트_기상_예측_시스템_아키텍처.drawio_(1).png)
+![Image](https://github.com/user-attachments/assets/e31a1842-2466-4855-b3bf-c384f5f3632c)
 
 
 
